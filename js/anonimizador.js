@@ -1,5 +1,5 @@
 // Seudonimización reversible de causas judiciales antes de enviarlas a un LLM.
-// No depende del navegador: se puede usar también desde Node (ver pruebas/).
+// No depende del navegador: se usa como script clásico (window.Anonimizador) o desde Node (require).
 //
 // Capas de detección (de más a menos confiable):
 //   1. Litigantes de la carátula del expediente del PJUD (datos estructurados).
@@ -7,11 +7,14 @@
 //   3. Heurísticas de nombres: nombres de pila conocidos y palabras que anteceden a un nombre
 //      ("don", "abogado", "testigo"...). Cada persona encontrada se busca después en TODA la causa.
 
+(function (global) {
+"use strict";
+
 // ------------------------------------------------------------------ utilidades
 const L = "A-Za-zÁÉÍÓÚÑÜáéíóúñü";
 
-export function normalizar(s) {
-  return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toUpperCase()
+function normalizar(s) {
+  return s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
     .replace(/\s+/g, " ").replace(/[^A-Z0-9 ]/g, "").trim();
 }
 
@@ -32,7 +35,7 @@ function fuenteFlexible(valor) {
 const bordes = (fuente) => `(?<![${L}])${fuente}(?![${L}])`;
 const rx = (fuente, flags = "giu") => new RegExp(fuente, flags);
 
-export function dvRut(cuerpo) {
+function dvRut(cuerpo) {
   let s = 0, m = 2;
   for (const d of [...cuerpo].reverse()) {
     s += Number(d) * m;
@@ -103,7 +106,7 @@ const NO_PERSONA = new Set(`CORTE APELACIONES TESORERIA TESORERO TESORERA TRIBUN
 const PARTICULAS = new Set(["DE", "DEL", "LA", "LAS", "LOS", "SAN", "SANTA"]);
 
 // Nombres de pila frecuentes en Chile: permiten reconocer nombres que no van precedidos de "don", "abogado", etc.
-export const NOMBRES_PILA = new Set(normalizar(`
+const NOMBRES_PILA = new Set(normalizar(`
   ADRIAN ADRIANA AGUSTIN AGUSTINA AIDA ALBA ALBERTO ALEJANDRA ALEJANDRO ALEXIS ALFONSO ALFREDO ALICIA
   ALONSO ALVARO AMANDA AMELIA ANA ANDREA ANDRES ANGEL ANGELA ANGELICA ANGELINA ANIBAL ANTONIA ANTONIO
   ARELIS ARIEL ARMANDO ARTURO AUGUSTO AURORA BARBARA BASTIAN BEATRIZ BENJAMIN BERNARDA BERNARDITA
@@ -158,7 +161,7 @@ function esPlausible(nombre, comunes) {
   return !palabras.some((p) => comunes.has(p.toLowerCase()));
 }
 
-export function detectarPersonas(texto, comunes) {
+function detectarPersonas(texto, comunes) {
   const encontrados = [];
   for (const m of texto.matchAll(RE_SECUENCIA)) {
     const palabras = m[0].split(/\s+/);
@@ -193,9 +196,9 @@ function claveDireccion(direccion) {
 }
 
 // ------------------------------------------------------------------ seudonimizador
-export const TIPOS = ["PERSONA", "EMPRESA", "RUT", "DIRECCION", "EMAIL", "TELEFONO", "OTRO"];
+const TIPOS = ["PERSONA", "EMPRESA", "RUT", "DIRECCION", "EMAIL", "TELEFONO", "OTRO"];
 
-export class Seudonimizador {
+class Seudonimizador {
   constructor({ excluidos = [] } = {}) {
     this.vault = {};      // token -> valor original (primera forma vista)
     this.glosario = {};   // token -> rol, para darle contexto al LLM
@@ -470,7 +473,7 @@ export class Seudonimizador {
   }
 }
 
-export function restaurar(texto, vault) {
+function restaurar(texto, vault) {
   const desconocidos = [];
   const restaurado = texto.replace(/\[[A-Z]+_\d+\]/g, (t) => {
     if (!(t in vault)) desconocidos.push(t);
@@ -480,7 +483,7 @@ export function restaurar(texto, vault) {
 }
 
 // Secuencias de 2 a 4 palabras en MAYÚSCULAS que quedaron sin enmascarar, para revisión humana.
-export function posiblesFugas(textoEnmascarado, top = 60) {
+function posiblesFugas(textoEnmascarado, top = 60) {
   const c = new Map();
   for (const m of textoEnmascarado.matchAll(RE_MAYUS_FUGA)) {
     const palabras = m[0].split(/\s+/);
@@ -492,7 +495,7 @@ export function posiblesFugas(textoEnmascarado, top = 60) {
 }
 
 // Proceso completo sobre un documento dividido en páginas.
-export function procesar(paginas, { manuales = [], excluidos = [] } = {}) {
+function procesar(paginas, { manuales = [], excluidos = [] } = {}) {
   const s = new Seudonimizador({ excluidos });
   const partes = paginas.length ? s.registrarLitigantes(paginas[0]) : [];
   for (const { valor, tipo } of manuales) s.agregarManual(valor, tipo);
@@ -510,3 +513,8 @@ export function procesar(paginas, { manuales = [], excluidos = [] } = {}) {
     fugas: posiblesFugas(enmascaradas.join("\n")),
   };
 }
+
+const api = { normalizar, dvRut, NOMBRES_PILA, detectarPersonas, TIPOS, Seudonimizador, restaurar, posiblesFugas, procesar };
+if (typeof module === "object" && module.exports) module.exports = api;
+else global.Anonimizador = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);

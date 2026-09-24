@@ -1,5 +1,8 @@
-import { procesar, restaurar, normalizar } from "./anonimizador.js";
-import { extraer } from "./extraccion.js";
+(function () {
+"use strict";
+
+const { procesar, restaurar, normalizar } = window.Anonimizador;
+const { extraer } = window.Extraccion;
 
 const $ = (id) => document.getElementById(id);
 const escapar = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -223,9 +226,19 @@ const base = () => (estado.archivo || "documento").replace(/\.[^.]+$/, "");
 // ------------------------------------------------------------------ eventos
 const zona = $("zona");
 $("archivo").addEventListener("change", (e) => cargar(e.target.files[0]));
-zona.addEventListener("dragover", (e) => { e.preventDefault(); zona.classList.add("encima"); });
-zona.addEventListener("dragleave", () => zona.classList.remove("encima"));
-zona.addEventListener("drop", (e) => {
+// Se acepta el archivo soltado en cualquier parte de la página; si no, el navegador lo abre en otra pestaña.
+const traeArchivo = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+window.addEventListener("dragover", (e) => {
+  if (!traeArchivo(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  zona.classList.add("encima");
+});
+window.addEventListener("dragleave", (e) => {
+  if (!e.relatedTarget) zona.classList.remove("encima");
+});
+window.addEventListener("drop", (e) => {
+  if (!traeArchivo(e)) return;
   e.preventDefault();
   zona.classList.remove("encima");
   cargar(e.dataTransfer.files[0]);
@@ -327,3 +340,4 @@ $("descargar-restaurado").addEventListener("click", () => descargar(`${base()}_r
 window.addEventListener("beforeunload", (e) => {
   if (estado.resultado) e.preventDefault(); // la tabla de tokens se pierde al cerrar
 });
+})();

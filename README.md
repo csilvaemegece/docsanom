@@ -13,7 +13,7 @@ Respuesta final ◄── restaurar (en tu navegador) ◄───────�
 
 ## Uso
 
-1. Abre `index.html` (o la versión publicada en GitHub Pages) y sube el PDF, DOCX o TXT de la causa.
+1. Abre `index.html` (con doble clic o desde GitHub Pages) y arrastra a la página el PDF, DOCX o TXT de la causa.
 2. Revisa lo enmascarado:
    - Haz clic en un dato resaltado para dejar de enmascararlo.
    - En **Posibles fugas**, enmascara lo que haya quedado visible o agrega datos a mano.
@@ -46,11 +46,7 @@ Las variantes de una misma entidad (tildes, mayúsculas, saltos de línea, error
 
 *Settings → Pages → Build and deployment → Deploy from a branch → `main` / `(root)`*. Queda en `https://csilvaemegece.github.io/docsanom/`.
 
-Para usarla localmente, sirve la carpeta con cualquier servidor estático (los módulos JS no funcionan desde `file://`):
-
-```bash
-python -m http.server 8000
-```
+También funciona sin publicar: descarga el repositorio y abre `index.html` con doble clic. Hace falta conexión a internet la primera vez, para descargar las librerías y el modelo del OCR.
 
 ## Estructura
 

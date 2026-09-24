@@ -1,6 +1,9 @@
 // Extracción de texto en el navegador: PDF (con OCR en páginas escaneadas), Word (.docx) y texto plano.
 // Las librerías se descargan desde un CDN; el documento nunca sale del navegador.
 
+(function () {
+"use strict";
+
 const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
 const TESSERACT = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
@@ -93,7 +96,7 @@ async function extraerDocx(archivo) {
   return { paginas: [value], ocrPaginas: [], escaneadas: [] };
 }
 
-export async function extraer(archivo, opciones = {}) {
+async function extraer(archivo, opciones = {}) {
   const nombre = archivo.name.toLowerCase();
   if (nombre.endsWith(".pdf") || archivo.type === "application/pdf") return extraerPdf(archivo, opciones);
   if (nombre.endsWith(".docx")) return extraerDocx(archivo);
@@ -103,3 +106,6 @@ export async function extraer(archivo, opciones = {}) {
   }
   throw new Error("Formato no soportado. Usa PDF, DOCX o TXT.");
 }
+
+window.Extraccion = { extraer };
+})();

@@ -2,7 +2,9 @@
 // Ejecutar con:  node --test pruebas/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { procesar, restaurar, dvRut, normalizar } from "../js/anonimizador.js";
+import anonimizador from "../js/anonimizador.js";
+
+const { procesar, restaurar, dvRut, normalizar } = anonimizador;
 
 const rut = (cuerpo) => `${cuerpo}-${dvRut(cuerpo)}`;
 const RUT_EMPRESA = rut("76111222");
