@@ -23,23 +23,30 @@ function cargarScript(url) {
   return scripts[url];
 }
 
-// Reconstruye las líneas de una página a partir de los fragmentos de texto de pdf.js.
+// Reconstruye las líneas de una página por posición: agrupa los fragmentos que están a la misma altura
+// y los ordena de izquierda a derecha. No se usa el orden interno del PDF porque en los textos
+// justificados cada palabra viene por separado y quedaba una palabra por línea.
 function textoDePagina(contenido) {
-  let texto = "", ultimaY = null, finX = null;
-  for (const item of contenido.items) {
-    if (!("str" in item)) continue;
-    const [, , , , x, y] = item.transform;
-    if (ultimaY !== null && Math.abs(y - ultimaY) > 2) texto += "\n";
-    else if (finX !== null && x - finX > 1 && !texto.endsWith(" ") && !item.str.startsWith(" ")) texto += " ";
-    texto += item.str;
-    if (item.hasEOL) {
-      if (item.str || !texto.endsWith("\n")) texto += "\n";
-      ultimaY = null;
-      finX = null;
-    }
-    else { ultimaY = y; finX = x + item.width; }
+  const items = contenido.items
+    .filter((it) => "str" in it && it.str.trim())
+    .map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], ancho: it.width, alto: Math.abs(it.transform[3]) || it.height || 10 }))
+    .sort((a, b) => b.y - a.y || a.x - b.x);
+  const lineas = [];
+  for (const it of items) {
+    const linea = lineas.at(-1);
+    if (linea && Math.abs(linea.y - it.y) <= Math.max(2, 0.45 * Math.min(linea.alto, it.alto))) linea.items.push(it);
+    else lineas.push({ y: it.y, alto: it.alto, items: [it] });
   }
-  return texto;
+  return lineas.map(({ items: fila }) => {
+    fila.sort((a, b) => a.x - b.x);
+    let texto = "", finX = null;
+    for (const it of fila) {
+      if (finX !== null && it.x - finX > 0.15 * it.alto && !texto.endsWith(" ") && !it.str.startsWith(" ")) texto += " ";
+      texto += it.str;
+      finX = it.x + it.ancho;
+    }
+    return texto.replace(/\s+/g, " ").trim();
+  }).join("\n");
 }
 
 async function extraerPdf(archivo, { ocr, alProgresar, cancelado }) {

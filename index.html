@@ -26,6 +26,7 @@
       <span>o haz clic para elegirlo · PDF, DOCX o TXT</span>
     </label>
     <label class="opcion"><input type="checkbox" id="usar-ocr" checked> Leer páginas escaneadas con OCR (más lento: unos segundos por página)</label>
+    <label class="opcion"><input type="checkbox" id="limpiar" checked> Limpiar el texto: quitar numeración de hojas, firma electrónica, encabezados repetidos y ruido del OCR, y unir párrafos cortados</label>
     <div id="progreso" class="progreso" hidden>
       <div class="progreso-texto"><span id="progreso-fase"></span><span id="progreso-num"></span></div>
       <div class="barra"><div id="progreso-barra"></div></div>
@@ -39,6 +40,11 @@
   <section class="paso" id="paso-revision" hidden>
     <h2><span class="num">2</span> Revisa lo enmascarado</h2>
     <p class="nota" id="resumen-archivo"></p>
+    <details id="limpieza-detalle" class="limpieza" hidden>
+      <summary id="limpieza-resumen"></summary>
+      <p class="nota">Estas líneas no se envían a la IA. Si ves algo importante, desactiva «Limpiar el texto» en el paso 1.</p>
+      <div id="limpieza-lista"></div>
+    </details>
     <div class="chips" id="chips"></div>
     <p class="nota">Haz clic en cualquier dato resaltado para dejar de enmascararlo. Revisa la pestaña <em>Posibles fugas</em>: la detección es automática y puede omitir datos.</p>
 
@@ -130,6 +136,7 @@
 </footer>
 
 <div id="aviso" class="aviso" role="status" aria-live="polite" hidden></div>
+<script src="js/limpieza.js"></script>
 <script src="js/anonimizador.js"></script>
 <script src="js/extraccion.js"></script>
 <script src="js/app.js"></script>

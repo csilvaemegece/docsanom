@@ -3,6 +3,7 @@
 
 const { procesar, restaurar, normalizar } = window.Anonimizador;
 const { extraer } = window.Extraccion;
+const { limpiarDocumento, CATEGORIAS } = window.Limpieza;
 
 const $ = (id) => document.getElementById(id);
 const escapar = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -11,7 +12,9 @@ const NOMBRES_TIPO = { PERSONA: "Personas", EMPRESA: "Empresas", RUT: "RUT", DIR
 
 const estado = {
   archivo: null,
-  paginas: [],
+  originales: [], // texto tal como se extrajo
+  paginas: [],    // texto que se enmascara (limpio o no, según la opción)
+  eliminadas: null,
   ocrPaginas: new Set(),
   manuales: [],   // [{valor, tipo}]
   excluidos: [],  // valores que no se enmascaran
@@ -56,9 +59,10 @@ async function cargar(archivo) {
         $("cancelar").hidden = !/OCR/.test(fase);
       },
     });
-    estado.paginas = r.paginas;
+    estado.originales = r.paginas;
     estado.ocrPaginas = new Set(r.ocrPaginas);
-    if (!estado.paginas.some((p) => p.trim())) throw new Error("No se encontró texto en el documento. Si es un PDF escaneado, activa el OCR.");
+    if (!estado.originales.some((p) => p.trim())) throw new Error("No se encontró texto en el documento. Si es un PDF escaneado, activa el OCR.");
+    aplicarLimpieza();
     recalcular();
     $("paso-revision").hidden = $("paso-envio").hidden = false;
     $("paso-revision").scrollIntoView({ behavior: "smooth" });
@@ -71,6 +75,31 @@ async function cargar(archivo) {
 }
 
 // ------------------------------------------------------------------ procesamiento y vista
+function aplicarLimpieza() {
+  if ($("limpiar").checked) {
+    const r = limpiarDocumento(estado.originales, { ocrPaginas: [...estado.ocrPaginas] });
+    estado.paginas = r.paginas;
+    estado.eliminadas = r.eliminadas;
+  } else {
+    estado.paginas = estado.originales;
+    estado.eliminadas = null;
+  }
+  pintarLimpieza();
+}
+
+function pintarLimpieza() {
+  const e = estado.eliminadas;
+  const total = e ? Object.values(e).reduce((s, l) => s + l.length, 0) : 0;
+  $("limpieza-detalle").hidden = !total;
+  if (!total) return;
+  const partes = Object.entries(e).filter(([, l]) => l.length).map(([k, l]) => `${l.length} de ${CATEGORIAS[k].charAt(0).toLowerCase()}${CATEGORIAS[k].slice(1)}`);
+  $("limpieza-resumen").textContent = `Limpieza: se quitaron ${total} líneas (${partes.join(", ")}). Ver cuáles`;
+  $("limpieza-lista").innerHTML = Object.entries(e).filter(([, l]) => l.length).map(([k, l]) => `
+    <h4>${CATEGORIAS[k]} (${l.length})</h4>
+    <ul>${l.slice(0, 300).map(({ pagina, linea }) => `<li><span>p. ${pagina}:</span> ${escapar(linea)}</li>`).join("")}
+    ${l.length > 300 ? `<li><span>… y ${l.length - 300} más</span></li>` : ""}</ul>`).join("");
+}
+
 function recalcular() {
   const t0 = performance.now();
   estado.resultado = procesar(estado.paginas, { manuales: estado.manuales, excluidos: estado.excluidos });
@@ -257,6 +286,12 @@ document.querySelectorAll(".pestana").forEach((b) => b.addEventListener("click",
 }));
 
 $("ver-originales").addEventListener("change", pintarVista);
+$("limpiar").addEventListener("change", () => {
+  if (!estado.originales.length) return;
+  aplicarLimpieza();
+  recalcular();
+  avisar($("limpiar").checked ? "Texto limpio" : "Se muestra el texto sin limpiar");
+});
 let busquedaPendiente;
 $("buscar").addEventListener("input", () => {
   clearTimeout(busquedaPendiente);

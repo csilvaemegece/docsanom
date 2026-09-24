@@ -63,7 +63,7 @@ const RE_RUT_PEGADO = /(\d{7,8})-([\dkK])(?![A-Za-z0-9_])/g;
 const RE_RUT_CONTEXTO = /(?<=(?:\bRUT(?:\/ROL)?|\bR\.U\.T\.?|c[ée]dula(?:\s+nacional)?\s+de\s+identidad)(?:\s*N[°º.]?)?\s*:?\s*)\d[\d.,\-]{5,12}[\dkK](?![A-Za-z0-9])/gi;
 const RE_EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 // Correos donde el OCR no leyó la @: "juan.perezOgmail.com", "jperez(2gmai!.com"
-const RE_EMAIL_OCR = /[\w¡][\w.¡]*(?:\.\s[\w.¡]+)?[^\s,;@]{0,5}?(?:[gq6]ma[il1!]{1,2}|hotmail|outlook|yahoo)[.,]?(?:com|cl)\b/gi;
+const RE_EMAIL_OCR = /[\w¡][\w.¡]*(?:\.\s[\w.¡]+)?[^\s,;@]{0,5}?\s?(?:[gqy6]ma[il1!]{1,2}|hotmail|outlook|yahoo)[.,]?\s?(?:com|cl)\b/gi;
 const RE_TELEFONO = /(?<!\d)(?:\+?56[\s-]?)?(?:9[\s-]?\d{4}[\s-]?\d{4}|\d{2}[\s-]\d{6,7})(?!\d)/g;
 const PREFIJO_CALLE = "(?:calle|avenida|avda\\.?|av\\.|pasaje|psje\\.?|pje\\.?|camino|villa|poblaci[oó]n)";
 const RE_DIRECCION = rx(
@@ -208,6 +208,7 @@ class Seudonimizador {
     this.personas = new Map(); // token -> palabras normalizadas
     this.empresas = new Map(); // token -> Set de palabras distintivas
     this.rutes = new Map();    // cuerpo del RUT (sin DV) -> token
+    this.difusos = [];         // [texto sin espacios, token]: partes y correos para la búsqueda aproximada
     this.excluidos = new Set(excluidos.map(normalizar));
   }
 
@@ -244,7 +245,13 @@ class Seudonimizador {
     if (palabras.length >= 3 && sinPart.length >= 3) {
       const [paterno, materno] = sinPart.slice(-2);
       variantes.add(`${palabras[0]} ${paterno}`).add(`${paterno} ${materno}`);
-      if (variantesCortas && paterno.length >= 5) variantes.add(paterno); // "PÉREZ con Fisco", "el señor Pérez"
+      if (variantesCortas) {
+        // Partes del juicio: también cada apellido suelto ("PÉREZ con Fisco", "el señor Pérez", o el materno
+        // separado del resto del nombre por el rol en la carátula). Si hay otra persona con el mismo
+        // apellido, su nombre completo es más largo y conserva su propio token.
+        for (const apellido of [paterno, materno]) if (apellido.length >= 5) variantes.add(apellido);
+        for (const v of [palabras.join(""), palabras[0] + paterno, paterno + materno]) this.difusos.push([v, tok]);
+      }
     }
     for (const v of [...variantes].sort((a, b) => b.length - a.length))
       this.conocidos.push([rx(bordes(fuenteFlexible(v))), tok]);
@@ -267,6 +274,7 @@ class Seudonimizador {
       this.conocidos.push([rx(`(?<![${L}])` + fuenteFlexible(titular) + `(?:\\s+[${MAY}]+){0,2}` + sufijo), tok]);
     }
     this.empresas.set(tok, new Set(normalizar(nucleo).split(" ")));
+    this.difusos.push([normalizar(nucleo).replace(/ /g, ""), tok]);
     return tok;
   }
 
@@ -276,7 +284,7 @@ class Seudonimizador {
     // El RUT de una parte también aparece sin guion, sin dígito verificador o pegado a su nombre
     const cuerpo = rutNormalizado(rut).slice(0, -1);
     this.rutes.set(cuerpo, tok);
-    const conSeparadores = `${cuerpo.slice(0, -6)}[.,]?${cuerpo.slice(-6, -3)}[.,]?${cuerpo.slice(-3)}`; // "76,392.120" del OCR
+    const conSeparadores = `${cuerpo.slice(0, -6)}[.,:-]?${cuerpo.slice(-6, -3)}[.,:-]?${cuerpo.slice(-3)}`; // "76,392.120", "76:392.120", "76-392.120" del OCR
     this.conocidos.push([new RegExp(`(?<!\\d)${conSeparadores}(?:\\s?-?\\s?[\\dkK])?(?!\\d)`, "g"), tok]);
     return tok;
   }
@@ -298,14 +306,24 @@ class Seudonimizador {
       let j = i + 1, tipo = null;
       if (esTipo(palabras[j] || "")) tipo = palabras[j++];
       else if (esTipo(palabras[i - 1] || "")) tipo = palabras[i - 1];
-      const nombre = [];
-      while (j < palabras.length && esNombre(palabras[j]) && !esRut(palabras[j])) nombre.push(palabras[j++]);
+      // Cuando la tabla se lee por filas, el rol de dos líneas ("Abogado / Recurrente") queda intercalado
+      // con el nombre: "JOSÉ PÉREZ / Recurrente SOTO". Esas palabras se suman al rol y el nombre continúa.
+      const nombre = [], rolIntercalado = [];
+      while (j < palabras.length && !esRut(palabras[j]) && !esTipo(palabras[j])) {
+        if (esNombre(palabras[j])) { nombre.push(palabras[j++]); continue; }
+        let k = j;
+        while (k < palabras.length && !esNombre(palabras[k]) && !esRut(palabras[k]) && !esTipo(palabras[k]) && k - j < 3) k++;
+        if (!nombre.length || k >= palabras.length || !esNombre(palabras[k]) || esRut(palabras[k])) break;
+        rolIntercalado.push(...palabras.slice(j, k));
+        j = k;
+      }
       // El rol son las palabras (no mayúsculas) inmediatamente antes del RUT / tipo
       const rol = [];
       for (let k = i - 1 - (tipo && esTipo(palabras[i - 1]) ? 1 : 0); k >= 0 && rol.length < 3; k--) {
         if (esRut(palabras[k]) || (esNombre(palabras[k]) && !/^[A-Z]{2,5}\./.test(palabras[k]))) break;
         rol.unshift(palabras[k]);
       }
+      rol.push(...rolIntercalado);
       if (!nombre.length) continue;
       partes.push({ rol: rol.join(" ").toLowerCase() || "parte", tipo, rut: palabras[i], nombre: nombre.join(" ") });
     }
@@ -337,8 +355,17 @@ class Seudonimizador {
     for (const nombre of [...nombres].sort((a, b) => b.split(" ").length - a.split(" ").length))
       this.registrarPersona(nombre, null, false);
     // Los correos bien escritos se registran antes, para que las versiones del OCR se asocien a ellos.
-    for (const t of textos)
-      for (const m of t.matchAll(RE_EMAIL)) this.token("EMAIL", m[0].replace(/\.$/, ""), m[0].toLowerCase().replace(/\.$/, ""));
+    for (const t of textos) {
+      for (const m of t.matchAll(RE_EMAIL)) {
+        const correo = m[0].replace(/\.$/, "");
+        const tok = this.token("EMAIL", correo, correo.toLowerCase());
+        const local = normalizar(correo.split("@")[0]).replace(/ /g, "");
+        if (!this.difusos.some(([, t]) => t === tok)) {
+          this.difusos.push([normalizar(correo).replace(/ /g, ""), tok]);
+          if (local.length >= 6) this.difusos.push([local, tok]);
+        }
+      }
+    }
     // Direcciones: "avenida Los Aromos 50" también aparece como "Los Aromos N°50" más adelante.
     for (const t of textos) {
       for (const m of t.matchAll(RE_DIRECCION)) {
@@ -430,6 +457,32 @@ class Seudonimizador {
     return spans;
   }
 
+  // Búsqueda aproximada de las partes y correos conocidos, para versiones deformadas por el OCR:
+  // "JOSE ZUIGA CONTRERAS", "MARIAPEREZ SOTO", "jperez gmail.com". Compara grupos de 1 a 4 palabras
+  // seguidas, sin espacios, contra cada valor conocido.
+  spansDifusos(texto) {
+    const claves = this.difusos.filter(([c]) => c.length >= 8);
+    if (!claves.length) return [];
+    const palabras = [...texto.matchAll(/[\p{L}\d][\p{L}\d.@_-]*/gu)].map((m) => ({
+      ini: m.index, fin: m.index + m[0].length, n: normalizar(m[0]).replace(/ /g, ""),
+    }));
+    const spans = [];
+    for (let i = 0; i < palabras.length; i++) {
+      let unido = "";
+      for (let k = i; k < Math.min(i + 4, palabras.length); k++) {
+        unido += palabras[k].n;
+        if (unido.length < 8) continue;
+        if (unido.length > 45) break;
+        for (const [clave, tok] of claves) {
+          if (Math.abs(unido.length - clave.length) > clave.length * 0.2 || unido[0] !== clave[0]) continue;
+          const minimo = clave.length >= 14 ? 0.8 : 0.85;
+          if (similitud(unido, clave) >= minimo) spans.push([palabras[i].ini, palabras[k].fin, tok]);
+        }
+      }
+    }
+    return spans;
+  }
+
   excluido(texto, ini, fin, tok) {
     return this.excluidos.size > 0 &&
       (this.excluidos.has(normalizar(texto.slice(ini, fin))) || this.excluidos.has(normalizar(this.vault[tok] || "")));
@@ -440,7 +493,7 @@ class Seudonimizador {
     // Primero las entidades conocidas (garantizan el mismo token en toda la causa); las detecciones
     // por regex solo ocupan lo que quede libre. Dentro de cada grupo gana el tramo más largo.
     const elegidos = [];
-    for (const grupo of [this.spansConocidos(texto), this.spans(texto)]) {
+    for (const grupo of [this.spansConocidos(texto), this.spans(texto), this.spansDifusos(texto)]) {
       grupo.sort((a, b) => a[0] - b[0] || (b[1] - b[0]) - (a[1] - a[0]));
       for (const [ini, fin, tok] of grupo) {
         if (this.excluido(texto, ini, fin, tok)) continue;

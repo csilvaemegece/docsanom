@@ -21,6 +21,20 @@ Respuesta final ◄── restaurar (en tu navegador) ◄───────�
 4. **Descarga la tabla de tokens.** Contiene los datos reales y es necesaria para restaurar; si recargas la página, se pierde.
 5. Pega la respuesta de la IA en el paso 4 para recuperar los nombres reales. La página avisa si la IA devolvió marcadores que no existen.
 
+## Limpieza del texto
+
+Antes de enmascarar, la página limpia el texto extraído (se puede desactivar en el paso 1):
+
+- **Numeración de hojas y folios:** "página 12 de 444", "FOJAS 1 (UNO)", números sueltos.
+- **Firma electrónica del PJUD:** código de verificación, "Este documento tiene firma electrónica…", verificadoc, horas "UTC-3" y el aviso de horario de verano.
+- **Encabezados y pies idénticos** que se repiten en muchas páginas.
+- **Ruido del OCR:** letras sueltas, rayas y sellos ("Y", "|", "!", "sa AA a Ne »…"). Solo se aplica a las páginas leídas con OCR.
+- **Párrafos cortados:** une las líneas partidas por el ancho de la página y las palabras cortadas con guion.
+
+Las líneas eliminadas se pueden revisar en *Ver cuáles*, debajo del resumen.
+
+Además, el texto de los PDF digitales se reconstruye por posición en la página. Así se evita que el texto justificado salga con una palabra por línea.
+
 ## Qué detecta
 
 | Dato | Cómo |
@@ -32,7 +46,7 @@ Respuesta final ◄── restaurar (en tu navegador) ◄───────�
 | Direcciones | Calle / avenida / pasaje + número, y el campo `DOMICILIO:` de los formularios |
 | Correos y teléfonos | Formatos habituales, incluidos correos donde el OCR no leyó la `@` |
 
-Las variantes de una misma entidad (tildes, mayúsculas, saltos de línea, errores del OCR) reciben el mismo token, para que la IA entienda que se trata de la misma persona.
+Las variantes de una misma entidad reciben el mismo token, para que la IA entienda que se trata de la misma persona. Eso incluye tildes, mayúsculas, saltos de línea y errores del OCR. Para las partes y los correos se usa además una búsqueda aproximada que reconoce versiones deformadas por el OCR, como un nombre sin la "Ñ" o dos palabras pegadas.
 
 ## Limitaciones
 
@@ -53,11 +67,12 @@ También funciona sin publicar: descarga el repositorio y abre `index.html` con 
 - `index.html`, `css/estilos.css`: interfaz.
 - `js/app.js`: lógica de la interfaz.
 - `js/extraccion.js`: lectura de PDF (con OCR), DOCX y TXT.
-- `js/anonimizador.js`: motor de seudonimización, sin dependencias del navegador.
-- `pruebas/`: pruebas del motor con una causa ficticia.
+- `js/limpieza.js`: limpieza del texto extraído.
+- `js/anonimizador.js`: motor de seudonimización.
+- `pruebas/`: pruebas de la limpieza y del motor con textos ficticios. `limpieza.js` y `anonimizador.js` no dependen del navegador.
 
 ```bash
-node --test pruebas/anonimizador.test.mjs
+node --test pruebas/anonimizador.test.mjs pruebas/limpieza.test.mjs
 ```
 
 > No subas causas reales ni tablas de tokens a este repositorio. El `.gitignore` excluye PDF, DOCX y JSON por precaución.
