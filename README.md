@@ -1,11 +1,11 @@
-# Anonimizador de causas
+# Anonimizador de causas · S.A.C.A.
 
-Página web para **enmascarar datos personales de una causa judicial antes de enviarla a una IA** y luego **restaurarlos en la respuesta**.
+Módulo del S.A.C.A. (Sistema de Automatización de Cortes de Apelaciones) para **enmascarar datos personales de una causa judicial antes de enviarla a una IA** y luego **restaurarlos en la respuesta**.
 
 ```
 Causa original ──► enmascarar (en tu navegador) ──► texto con [PERSONA_1], [RUT_1]… ──► IA
                         │                                                                │
-                  tabla de tokens (queda contigo)                                       ▼
+                  tabla de marcadores (queda contigo)                                  ▼
 Respuesta final ◄── restaurar (en tu navegador) ◄──────────────── resumen con [PERSONA_1]…
 ```
 
@@ -18,8 +18,8 @@ Respuesta final ◄── restaurar (en tu navegador) ◄───────�
    - Haz clic en un dato resaltado para dejar de enmascararlo.
    - En **Posibles fugas**, enmascara lo que haya quedado visible o agrega datos a mano.
 3. Copia el texto para la IA. Incluye instrucciones para que la IA conserve los marcadores y un glosario de roles, por ejemplo `[PERSONA_2]: abogado recurrente`.
-4. **Descarga la tabla de tokens.** Contiene los datos reales y es necesaria para restaurar; si recargas la página, se pierde.
-5. Pega la respuesta de la IA en el paso 4 para recuperar los nombres reales. La página avisa si la IA devolvió marcadores que no existen.
+4. **Descarga la tabla de marcadores.** Contiene los datos reales y es necesaria para restaurar; si recargas la página, se pierde.
+5. En *Restaurar respuesta*, pega la respuesta de la IA para recuperar los nombres reales. La página avisa si la IA devolvió marcadores que no existen.
 
 ## Limpieza del texto
 
@@ -46,7 +46,7 @@ Además, el texto de los PDF digitales se reconstruye por posición en la págin
 | Direcciones | Calle / avenida / pasaje + número, y el campo `DOMICILIO:` de los formularios |
 | Correos y teléfonos | Formatos habituales, incluidos correos donde el OCR no leyó la `@` |
 
-Las variantes de una misma entidad reciben el mismo token, para que la IA entienda que se trata de la misma persona. Eso incluye tildes, mayúsculas, saltos de línea y errores del OCR. Para las partes y los correos se usa además una búsqueda aproximada que reconoce versiones deformadas por el OCR, como un nombre sin la "Ñ" o dos palabras pegadas.
+Las variantes de una misma entidad reciben el mismo marcador, para que la IA entienda que se trata de la misma persona. Eso incluye tildes, mayúsculas, saltos de línea y errores del OCR. Para las partes y los correos se usa además una búsqueda aproximada que reconoce versiones deformadas por el OCR, como un nombre sin la "Ñ" o dos palabras pegadas.
 
 ## Limitaciones
 
@@ -64,7 +64,9 @@ También funciona sin publicar: descarga el repositorio y abre `index.html` con 
 
 ## Estructura
 
-- `index.html`, `css/estilos.css`: interfaz.
+- `index.html`: interfaz, con la estructura de pantallas del SACA.
+- `css/saca.css`: copia de los estilos base del SACA; `css/anonimizador.css`: estilos propios del módulo.
+- `integracion_saca/`: plantilla Jinja e instrucciones para integrarlo al SACA (ver su README).
 - `js/app.js`: lógica de la interfaz.
 - `js/extraccion.js`: lectura de PDF (con OCR), DOCX y TXT.
 - `js/limpieza.js`: limpieza del texto extraído.
@@ -75,4 +77,4 @@ También funciona sin publicar: descarga el repositorio y abre `index.html` con 
 node --test pruebas/anonimizador.test.mjs pruebas/limpieza.test.mjs
 ```
 
-> No subas causas reales ni tablas de tokens a este repositorio. El `.gitignore` excluye PDF, DOCX y JSON por precaución.
+> No subas causas reales ni tablas de marcadores a este repositorio. El `.gitignore` excluye PDF, DOCX y JSON por precaución.

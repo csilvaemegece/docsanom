@@ -1,0 +1,173 @@
+{# Generado por integracion_saca/generar.mjs a partir de index.html. No editar a mano. #}
+{% extends "base.html" %}
+{% block title %}Anonimizador · SACA{% endblock %}
+{% block breadcrumb %}Anonimizador<span class="sep">›</span><span id="migas">Anonimizar causa</span>{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='anonimizador/css/anonimizador.css') }}">
+
+<!-- ============================================================ Anonimizar -->
+<div id="vista-anonimizar">
+  <div class="page-head">
+    <h1>Anonimizar causa</h1>
+    <p class="page-sub">Reemplaza nombres, RUT, direcciones, correos y teléfonos por marcadores antes de enviar la causa a una IA.</p>
+  </div>
+
+  <section class="panel" id="paso-carga">
+    <h2>1. Documento</h2>
+    <label class="dropzone" id="zona">
+      <input type="file" id="archivo" accept=".pdf,.docx,.txt,application/pdf,text/plain">
+      <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/>
+      </svg>
+      <span class="dropzone-title">Arrastra el PDF de la causa o haz clic para seleccionarlo</span>
+      <span class="dropzone-sub">PDF, DOCX o TXT</span>
+    </label>
+
+    <div class="opciones">
+      <label class="check"><input type="checkbox" id="usar-ocr" checked> Leer páginas escaneadas (OCR)</label>
+      <label class="check"><input type="checkbox" id="limpiar" checked> Limpiar numeración, firmas y ruido del OCR</label>
+    </div>
+
+    <div id="progreso" class="progreso" hidden>
+      <div class="progreso-fila">
+        <span id="progreso-fase"></span>
+        <span id="progreso-num" class="progreso-num"></span>
+      </div>
+      <div class="barra"><div id="progreso-barra"></div></div>
+      <div class="progreso-fila">
+        <span class="hint">Mantén esta pestaña visible: el navegador pausa el OCR en segundo plano.</span>
+        <button type="button" id="cancelar" class="btn btn-secondary btn-sm">Cancelar OCR</button>
+      </div>
+    </div>
+    <div id="error" class="flash flash-error" role="alert" hidden></div>
+  </section>
+
+  <div class="anon-grid" id="paso-revision" hidden>
+    <section class="panel revision">
+      <h2>2. Revisión</h2>
+      <p class="hint">Haz clic en un dato resaltado para dejar de enmascararlo. Revisa también <em>Posibles fugas</em>: la detección es automática.</p>
+
+      <div class="tabs" role="tablist">
+        <button role="tab" class="tab active" data-panel="panel-texto" aria-selected="true">Texto</button>
+        <button role="tab" class="tab" data-panel="panel-datos" aria-selected="false">Datos detectados</button>
+        <button role="tab" class="tab" data-panel="panel-fugas" aria-selected="false">Posibles fugas <span id="n-fugas" class="tab-count"></span></button>
+      </div>
+
+      <div id="panel-texto" class="tab-panel">
+        <div class="toolbar">
+          <input type="search" id="buscar" placeholder="Buscar en el texto" aria-label="Buscar en el texto">
+          <label class="check"><input type="checkbox" id="ver-originales"> Mostrar datos originales</label>
+        </div>
+        <div id="vista" class="documento"></div>
+      </div>
+
+      <div id="panel-datos" class="tab-panel" hidden>
+        <div class="table-wrap table-scroll">
+          <table>
+            <thead><tr><th>Marcador</th><th>Dato original</th><th>Veces</th><th>Rol</th><th></th></tr></thead>
+            <tbody id="tabla-datos"></tbody>
+          </table>
+        </div>
+        <div id="excluidos-caja" hidden>
+          <h3>No enmascarados por decisión tuya</h3>
+          <ul id="lista-excluidos" class="lista"></ul>
+        </div>
+      </div>
+
+      <div id="panel-fugas" class="tab-panel" hidden>
+        <p class="hint">Palabras en mayúsculas que quedaron visibles. La mayoría es texto normal del expediente; enmascara solo las que identifiquen a alguien.</p>
+        <ul id="lista-fugas" class="lista"></ul>
+        <h3>Agregar un dato</h3>
+        <form id="form-manual" class="filtro-form">
+          <div class="field-inline campo-ancho">
+            <label for="manual-valor">Texto a enmascarar</label>
+            <input type="text" id="manual-valor" placeholder="Ej.: Juan Pérez Soto" required>
+          </div>
+          <div class="field-inline">
+            <label for="manual-tipo">Tipo</label>
+            <select id="manual-tipo">
+              <option value="PERSONA">Persona</option>
+              <option value="EMPRESA">Empresa</option>
+              <option value="RUT">RUT</option>
+              <option value="DIRECCION">Dirección</option>
+              <option value="EMAIL">Correo</option>
+              <option value="TELEFONO">Teléfono</option>
+              <option value="OTRO">Otro</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary">Enmascarar</button>
+        </form>
+        <ul id="lista-manuales" class="lista"></ul>
+      </div>
+    </section>
+
+    <div class="columna-lateral">
+      <section class="panel">
+        <h2>Resumen</h2>
+        <dl class="ficha" id="resumen-archivo"></dl>
+        <table class="tabla-resumen">
+          <thead><tr><th>Dato</th><th>Distintos</th><th>Apariciones</th></tr></thead>
+          <tbody id="resumen-tipos"></tbody>
+        </table>
+        <details id="limpieza-detalle" class="limpieza" hidden>
+          <summary id="limpieza-resumen"></summary>
+          <p class="hint">Estas líneas no se envían a la IA. Si ves algo importante, desmarca «Limpiar» en el paso 1.</p>
+          <div id="limpieza-lista"></div>
+        </details>
+      </section>
+
+      <section class="panel" id="paso-envio">
+        <h2>3. Envío a la IA</h2>
+        <button type="button" class="btn btn-primary btn-block" id="copiar-ia">Copiar texto para la IA</button>
+        <button type="button" class="btn btn-secondary btn-block" id="descargar-txt">Descargar texto enmascarado</button>
+        <button type="button" class="btn btn-secondary btn-block" id="descargar-tabla">Descargar tabla de marcadores</button>
+        <p class="hint aviso-tabla">La tabla contiene los datos reales y es necesaria para restaurar la respuesta. Descárgala antes de cerrar la página y no la compartas.</p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ Restaurar -->
+<div id="vista-restaurar" hidden>
+  <div class="page-head">
+    <h1>Restaurar respuesta</h1>
+    <p class="page-sub">Reemplaza los marcadores de la respuesta de la IA por los datos originales.</p>
+  </div>
+
+  <div class="registro-grid">
+    <section class="panel">
+      <h2>1. Respuesta de la IA</h2>
+      <div class="fuente-tabla">
+        <span id="fuente-tabla" class="hint">Sin tabla de marcadores cargada.</span>
+        <label class="btn btn-secondary btn-sm">Cargar tabla (.json)<input type="file" id="cargar-tabla" accept=".json,application/json" hidden></label>
+      </div>
+      <textarea id="respuesta-ia" rows="14" placeholder="Pega aquí la respuesta, por ejemplo: [PERSONA_2], abogado de [EMPRESA_1], interpuso un recurso…"></textarea>
+      <button type="button" class="btn btn-primary btn-block" id="restaurar">Restaurar datos</button>
+    </section>
+
+    <section class="panel">
+      <h2>2. Resultado</h2>
+      <div id="alerta-restaurar" class="flash flash-error" hidden></div>
+      <div id="resultado-restaurar" hidden>
+        <div id="texto-restaurado" class="documento restaurado"></div>
+        <div class="camera-actions">
+          <button type="button" class="btn btn-secondary" id="copiar-restaurado">Copiar</button>
+          <button type="button" class="btn btn-secondary" id="descargar-restaurado">Descargar</button>
+        </div>
+      </div>
+      <p class="hint" id="resultado-vacio">El texto restaurado aparecerá aquí.</p>
+    </section>
+  </div>
+</div>
+
+<div id="aviso" class="toast" role="status" aria-live="polite" hidden></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='anonimizador/js/limpieza.js') }}"></script>
+<script src="{{ url_for('static', filename='anonimizador/js/anonimizador.js') }}"></script>
+<script src="{{ url_for('static', filename='anonimizador/js/extraccion.js') }}"></script>
+<script src="{{ url_for('static', filename='anonimizador/js/app.js') }}"></script>
+{% endblock %}

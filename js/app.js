@@ -45,7 +45,7 @@ async function cargar(archivo) {
   estado.cancelado = false;
   estado.manuales = [];
   estado.excluidos = [];
-  $("paso-revision").hidden = $("paso-envio").hidden = true;
+  $("paso-revision").hidden = true;
   $("progreso").hidden = false;
   $("cancelar").hidden = true;
   try {
@@ -64,7 +64,7 @@ async function cargar(archivo) {
     if (!estado.originales.some((p) => p.trim())) throw new Error("No se encontró texto en el documento. Si es un PDF escaneado, activa el OCR.");
     aplicarLimpieza();
     recalcular();
-    $("paso-revision").hidden = $("paso-envio").hidden = false;
+    $("paso-revision").hidden = false;
     $("paso-revision").scrollIntoView({ behavior: "smooth" });
   } catch (e) {
     console.error(e);
@@ -92,8 +92,7 @@ function pintarLimpieza() {
   const total = e ? Object.values(e).reduce((s, l) => s + l.length, 0) : 0;
   $("limpieza-detalle").hidden = !total;
   if (!total) return;
-  const partes = Object.entries(e).filter(([, l]) => l.length).map(([k, l]) => `${l.length} de ${CATEGORIAS[k].charAt(0).toLowerCase()}${CATEGORIAS[k].slice(1)}`);
-  $("limpieza-resumen").textContent = `Limpieza: se quitaron ${total} líneas (${partes.join(", ")}). Ver cuáles`;
+  $("limpieza-resumen").textContent = `Limpieza: ${total.toLocaleString("es-CL")} líneas quitadas`;
   $("limpieza-lista").innerHTML = Object.entries(e).filter(([, l]) => l.length).map(([k, l]) => `
     <h4>${CATEGORIAS[k]} (${l.length})</h4>
     <ul>${l.slice(0, 300).map(({ pagina, linea }) => `<li><span>p. ${pagina}:</span> ${escapar(linea)}</li>`).join("")}
@@ -101,26 +100,26 @@ function pintarLimpieza() {
 }
 
 function recalcular() {
-  const t0 = performance.now();
   estado.resultado = procesar(estado.paginas, { manuales: estado.manuales, excluidos: estado.excluidos });
   estado.tabla = { vault: estado.resultado.vault, glosario: estado.resultado.glosario, archivo: estado.archivo };
-  $("fuente-tabla").textContent = `Tabla: la de esta sesión (${estado.archivo})`;
-  const ms = Math.round(performance.now() - t0);
+  $("fuente-tabla").textContent = `Tabla de esta sesión: ${estado.archivo}`;
   const ocr = estado.ocrPaginas.size;
   const sinTexto = estado.paginas.filter((p) => p.trim().length < 50).length;
-  $("resumen-archivo").textContent =
-    `${estado.archivo} · ${estado.paginas.length} página(s)` +
-    (ocr ? ` · ${ocr} leída(s) con OCR` : "") +
-    (sinTexto ? ` · ${sinTexto} sin texto legible (revísalas en el original)` : "") +
-    ` · procesado en ${ms} ms`;
-  pintarChips();
+  const filas = [
+    ["Archivo", escapar(estado.archivo)],
+    ["Páginas", estado.paginas.length.toLocaleString("es-CL")],
+    ocr ? ["Con OCR", ocr.toLocaleString("es-CL")] : null,
+    sinTexto ? ["Sin texto", `${sinTexto} <span class="hint">(revisar en el original)</span>`] : null,
+  ].filter(Boolean);
+  $("resumen-archivo").innerHTML = filas.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  pintarResumen();
   pintarVista();
   pintarTabla();
   pintarFugas();
   pintarManuales();
 }
 
-function pintarChips() {
+function pintarResumen() {
   const { vault, apariciones } = estado.resultado;
   const porTipo = {};
   for (const tok of Object.keys(vault)) {
@@ -129,9 +128,10 @@ function pintarChips() {
     porTipo[t].unicos++;
     porTipo[t].veces += apariciones[tok] || 0;
   }
-  $("chips").innerHTML = Object.entries(porTipo)
-    .map(([t, c]) => `<span class="chip t-${t}">${NOMBRES_TIPO[t] || t}: <strong>${c.unicos}</strong> <span title="apariciones">(${c.veces})</span></span>`)
-    .join("") || `<span class="nota">No se detectaron datos personales. Revisa el texto y agrega datos a mano si hace falta.</span>`;
+  const orden = Object.keys(NOMBRES_TIPO).filter((t) => porTipo[t]);
+  $("resumen-tipos").innerHTML = orden.map((t) => `
+    <tr><td><span class="punto t-${t}"></span>${NOMBRES_TIPO[t]}</td><td>${porTipo[t].unicos}</td><td>${porTipo[t].veces}</td></tr>`).join("") ||
+    `<tr><td colspan="3" class="vacio">No se detectaron datos personales. Revisa el texto y agrégalos en «Posibles fugas».</td></tr>`;
 }
 
 function pintarVista() {
@@ -163,7 +163,7 @@ function pintarVista() {
       html.push(`<span class="pagina-titulo">Página ${i + 1}${etiqueta}</span>${pagina}`);
     }
   });
-  $("vista").innerHTML = html.join("") || `<span class="nota">Sin resultados para «${escapar(busqueda)}».</span>`;
+  $("vista").innerHTML = html.join("") || `<span class="hint">Sin resultados para «${escapar(busqueda)}».</span>`;
 }
 
 function pintarTabla() {
@@ -176,11 +176,11 @@ function pintarTabla() {
       <td>${escapar(vault[tok])}</td>
       <td>${apariciones[tok] || 0}</td>
       <td>${escapar(glosario[tok] || "")}</td>
-      <td><button type="button" class="boton secundario chico" data-excluir="${tok}">No enmascarar</button></td>
+      <td><button type="button" class="btn btn-secondary btn-sm" data-excluir="${tok}">No enmascarar</button></td>
     </tr>`).join("");
   $("excluidos-caja").hidden = !estado.excluidos.length;
   $("lista-excluidos").innerHTML = estado.excluidos.map((v, i) => `
-    <li><span>${escapar(v)}</span><button type="button" class="boton secundario chico" data-reincluir="${i}">Volver a enmascarar</button></li>`).join("");
+    <li><span>${escapar(v)}</span><button type="button" class="btn btn-secondary btn-sm" data-reincluir="${i}">Volver a enmascarar</button></li>`).join("");
 }
 
 function pintarFugas() {
@@ -188,19 +188,19 @@ function pintarFugas() {
   $("n-fugas").textContent = fugas.length;
   $("lista-fugas").innerHTML = fugas.map(([texto, n]) => `
     <li>
-      <span class="texto-fuga">${escapar(texto)} <span class="nota">(${n})</span></span>
+      <span class="texto-fuga">${escapar(texto)} <span class="veces">×${n}</span></span>
       <span class="botones">
-        <button type="button" class="boton secundario chico" data-fuga="${escapar(texto)}" data-tipo="PERSONA">Persona</button>
-        <button type="button" class="boton secundario chico" data-fuga="${escapar(texto)}" data-tipo="EMPRESA">Empresa</button>
-        <button type="button" class="boton secundario chico" data-fuga="${escapar(texto)}" data-tipo="OTRO">Otro</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-fuga="${escapar(texto)}" data-tipo="PERSONA">Persona</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-fuga="${escapar(texto)}" data-tipo="EMPRESA">Empresa</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-fuga="${escapar(texto)}" data-tipo="OTRO">Otro</button>
       </span>
-    </li>`).join("") || `<li class="nota">No quedan secuencias en mayúsculas sin enmascarar.</li>`;
+    </li>`).join("") || `<li class="hint">No quedan secuencias en mayúsculas sin enmascarar.</li>`;
 }
 
 function pintarManuales() {
   $("lista-manuales").innerHTML = estado.manuales.map((m, i) => `
     <li><span><mark class="t-${m.tipo}">${m.tipo}</mark> ${escapar(m.valor)}</span>
-    <button type="button" class="boton secundario chico" data-quitar-manual="${i}">Quitar</button></li>`).join("");
+    <button type="button" class="btn btn-secondary btn-sm" data-quitar-manual="${i}">Quitar</button></li>`).join("");
 }
 
 function excluir(tok) {
@@ -277,13 +277,25 @@ $("cancelar").addEventListener("click", () => {
   avisar("Cancelando OCR: las páginas restantes quedarán sin texto");
 });
 
-document.querySelectorAll(".pestana").forEach((b) => b.addEventListener("click", () => {
-  document.querySelectorAll(".pestana").forEach((x) => {
-    x.classList.toggle("activa", x === b);
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach((x) => {
+    x.classList.toggle("active", x === b);
     x.setAttribute("aria-selected", x === b);
     $(x.dataset.panel).hidden = x !== b;
   });
 }));
+
+// Vistas del menú lateral: #anonimizar y #restaurar
+const VISTAS = { anonimizar: "Anonimizar causa", restaurar: "Restaurar respuesta" };
+function mostrarVista() {
+  const vista = location.hash.slice(1) in VISTAS ? location.hash.slice(1) : "anonimizar";
+  for (const v of Object.keys(VISTAS)) $(`vista-${v}`).hidden = v !== vista;
+  document.querySelectorAll(".nav-item[data-vista]").forEach((a) => a.classList.toggle("active", a.dataset.vista === vista));
+  $("migas").textContent = VISTAS[vista];
+  document.title = `${VISTAS[vista]} · SACA`;
+}
+window.addEventListener("hashchange", mostrarVista);
+mostrarVista();
 
 $("ver-originales").addEventListener("change", pintarVista);
 $("limpiar").addEventListener("change", () => {
@@ -333,7 +345,7 @@ $("descargar-txt").addEventListener("click", () => descargar(`${base()}_enmascar
 $("descargar-tabla").addEventListener("click", () => {
   const { vault, glosario } = estado.resultado;
   const tabla = { formato: "docsanom-tabla-v1", archivo: estado.archivo, creado: new Date().toISOString(), vault, glosario };
-  descargar(`${base()}_tabla_tokens.json`, JSON.stringify(tabla, null, 2), "application/json");
+  descargar(`${base()}_tabla_marcadores.json`, JSON.stringify(tabla, null, 2), "application/json");
 });
 
 $("cargar-tabla").addEventListener("change", async (e) => {
@@ -343,7 +355,7 @@ $("cargar-tabla").addEventListener("change", async (e) => {
     const datos = JSON.parse(await f.text());
     if (!datos.vault || typeof datos.vault !== "object") throw new Error();
     estado.tabla = { vault: datos.vault, glosario: datos.glosario || {}, archivo: datos.archivo || f.name };
-    $("fuente-tabla").textContent = `Tabla: ${f.name} (${Object.keys(datos.vault).length} tokens)`;
+    $("fuente-tabla").textContent = `Tabla cargada: ${f.name} (${Object.keys(datos.vault).length} marcadores)`;
     avisar("Tabla cargada");
   } catch {
     avisar("El archivo no es una tabla de tokens válida");
@@ -355,7 +367,7 @@ $("restaurar").addEventListener("click", () => {
   const alerta = $("alerta-restaurar");
   alerta.hidden = true;
   if (!estado.tabla) {
-    alerta.textContent = "Primero procesa un documento o carga una tabla de tokens (.json).";
+    alerta.textContent = "Primero anonimiza un documento o carga una tabla de marcadores (.json).";
     alerta.hidden = false;
     return;
   }
@@ -364,8 +376,9 @@ $("restaurar").addEventListener("click", () => {
   const r = restaurar(texto, estado.tabla.vault);
   $("texto-restaurado").textContent = r.texto;
   $("resultado-restaurar").hidden = false;
+  $("resultado-vacio").hidden = true;
   if (r.desconocidos.length) {
-    alerta.textContent = `Atención: la respuesta contiene marcadores que no están en la tabla y quedaron sin restaurar: ${r.desconocidos.join(", ")}. La IA puede haberlos inventado o alterado.`;
+    alerta.textContent = `Marcadores sin restaurar: ${r.desconocidos.join(", ")}. No están en la tabla; la IA puede haberlos inventado o alterado.`;
     alerta.hidden = false;
   }
 });
