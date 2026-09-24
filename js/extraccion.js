@@ -4,10 +4,29 @@
 (function () {
 "use strict";
 
-const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
-const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
-const TESSERACT = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
-const MAMMOTH = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js";
+// Por defecto las librerías se descargan de un CDN. Un servidor puede entregarlas él mismo (equipos sin
+// salida a internet) definiendo window.ANONIMIZADOR_LIBRERIAS antes de cargar este script
+// (ver servidor/descargar_librerias.py).
+const LIBRERIAS = Object.assign({
+  pdfjs: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs",
+  pdfjsWorker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs",
+  tesseract: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+  tesseractWorker: null, // null: los que trae tesseract.js (CDN)
+  tesseractCore: null,
+  tesseractIdioma: null,
+  mammoth: "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js",
+}, window.ANONIMIZADOR_LIBRERIAS || {});
+// Rutas relativas -> absolutas: import() y los workers de Tesseract las resolverían contra otra base.
+const absoluta = (url) => url && new URL(url, document.baseURI).href;
+const PDFJS = absoluta(LIBRERIAS.pdfjs);
+const PDFJS_WORKER = absoluta(LIBRERIAS.pdfjsWorker);
+const TESSERACT = absoluta(LIBRERIAS.tesseract);
+const MAMMOTH = absoluta(LIBRERIAS.mammoth);
+const OPCIONES_TESSERACT = Object.fromEntries(Object.entries({
+  workerPath: absoluta(LIBRERIAS.tesseractWorker),
+  corePath: absoluta(LIBRERIAS.tesseractCore),
+  langPath: absoluta(LIBRERIAS.tesseractIdioma),
+}).filter(([, v]) => v));
 
 const MIN_CARACTERES = 50; // bajo esto, la página se considera escaneada
 
@@ -69,7 +88,7 @@ async function extraerPdf(archivo, { ocr, alProgresar, cancelado }) {
   const workers = [];
   for (let k = 0; k < n; k++) {
     alProgresar?.(`Preparando OCR ${k + 1} de ${n} (la primera vez descarga el modelo de español)`, 0, escaneadas.length);
-    workers.push(await Tesseract.createWorker("spa"));
+    workers.push(await Tesseract.createWorker("spa", 1, OPCIONES_TESSERACT));
     if (cancelado?.()) break;
   }
   const cola = [...escaneadas];

@@ -166,6 +166,9 @@
 {% endblock %}
 
 {% block scripts %}
+{% if librerias_locales %}
+<script>window.ANONIMIZADOR_LIBRERIAS = {{ librerias_locales|tojson }};</script>
+{% endif %}
 <script src="{{ url_for('static', filename='anonimizador/js/limpieza.js') }}"></script>
 <script src="{{ url_for('static', filename='anonimizador/js/anonimizador.js') }}"></script>
 <script src="{{ url_for('static', filename='anonimizador/js/extraccion.js') }}"></script>

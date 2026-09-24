@@ -7,3 +7,12 @@
 *_restaurada.txt
 *.txt
 node_modules/
+
+# Librerías descargadas por servidor/descargar_librerias.py
+vendor/
+!servidor/requirements.txt
+
+# Python
+.venv/
+__pycache__/
+*.pyc

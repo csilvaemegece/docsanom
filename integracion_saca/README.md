@@ -20,15 +20,33 @@ La plantilla se genera desde `index.html`. Si cambias la página, vuelve a gener
 node integracion_saca/generar.mjs
 ```
 
+> Si lo que quieres es levantarlo como un módulo aparte (su propio puerto en Waitress, igual que Adultos Mayores), no necesitas esta guía: usa [`servidor/`](../servidor/README.md), que ya viene listo.
+
 ## 2. Registrar la ruta (`app/routes.py`)
 
 ```python
 @bp.route("/anonimizador")
 def anonimizador():
-    return render_template("anonimizador.html", active_page="anonimizador")
+    return render_template("anonimizador.html", active_page="anonimizador",
+                           librerias_locales=librerias_locales())
 ```
 
 (Usa el nombre del blueprint del SACA; en el módulo de Adultos Mayores es `main`.)
+
+`librerias_locales()` es la función de `servidor/app/routes.py`. Cópiala para que la página use las librerías del propio servidor en lugar del CDN. Para eso:
+
+- Descarga las librerías con `servidor/descargar_librerias.py`.
+- Copia la carpeta `vendor/` a `app/static/anonimizador/vendor/`.
+- En la función, cambia la ruta donde se buscan los archivos a `app/static/anonimizador/vendor`.
+
+Si no pasas `librerias_locales`, la página funciona igual, pero descarga las librerías de internet.
+
+Registra también los tipos MIME, para que Flask entregue bien los `.mjs` en Windows:
+
+```python
+import mimetypes
+mimetypes.add_type("text/javascript", ".mjs")
+```
 
 ## 3. Agregar el menú (`app/templates/base.html`)
 
@@ -59,4 +77,4 @@ Dentro de `<nav class="side-nav">`. El atributo `data-vista` permite que la pág
 ## Notas
 
 - Las dos vistas (*Anonimizar causa* y *Restaurar respuesta*) están en la misma página a propósito. La tabla de marcadores vive en la memoria del navegador, y si fueran dos páginas se perdería al cambiar de una a otra.
-- La página descarga pdf.js, Tesseract.js, mammoth y el modelo de español del OCR desde cdnjs y jsdelivr. Si los equipos de la corte no tienen salida a internet, hay que servir esas librerías desde `static/` y cambiar las URL al inicio de `js/extraccion.js`.
+- Sin `librerias_locales`, la página descarga pdf.js, Tesseract.js, mammoth y el modelo de español del OCR desde cdnjs y jsdelivr. Con librerías locales no hace ninguna petición a internet (se probó con el acceso a internet bloqueado).

@@ -56,6 +56,10 @@ Las variantes de una misma entidad reciben el mismo marcador, para que la IA ent
 - **Los datos que permiten ubicar la causa no se enmascaran:** ROL, tribunal, números de expediente, fechas y montos. Con ellos se puede encontrar la causa en el PJUD.
 - **El OCR necesita la pestaña visible.** Tarda unos segundos por página y el navegador lo pausa si cambias de pestaña.
 
+## En producción (servidor Flask del SACA)
+
+Ver [`servidor/README.md`](servidor/README.md): instalación, Waitress, servicio de Windows y funcionamiento sin internet.
+
 ## Publicar con GitHub Pages
 
 *Settings → Pages → Build and deployment → Deploy from a branch → `main` / `(root)`*. Queda en `https://csilvaemegece.github.io/docsanom/`.
@@ -66,7 +70,8 @@ También funciona sin publicar: descarga el repositorio y abre `index.html` con 
 
 - `index.html`: interfaz, con la estructura de pantallas del SACA.
 - `css/saca.css`: copia de los estilos base del SACA; `css/anonimizador.css`: estilos propios del módulo.
-- `integracion_saca/`: plantilla Jinja e instrucciones para integrarlo al SACA (ver su README).
+- `servidor/`: módulo Flask listo para producción con Waitress, que puede funcionar sin internet (ver su README).
+- `integracion_saca/`: plantilla Jinja e instrucciones para agregarlo dentro de otra app Flask del SACA.
 - `js/app.js`: lógica de la interfaz.
 - `js/extraccion.js`: lectura de PDF (con OCR), DOCX y TXT.
 - `js/limpieza.js`: limpieza del texto extraído.
