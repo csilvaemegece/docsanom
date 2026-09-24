@@ -1,0 +1,9 @@
+# Nunca subir causas reales, textos extraídos ni tablas de tokens (contienen datos personales)
+*.pdf
+*.docx
+*.doc
+*.json
+*_enmascarado.txt
+*_restaurada.txt
+*.txt
+node_modules/
