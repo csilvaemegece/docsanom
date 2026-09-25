@@ -16,6 +16,8 @@ const estado = {
   paginas: [],    // texto que se enmascara (limpio o no, según la opción)
   eliminadas: null,
   ocrPaginas: new Set(),
+  fotos: new Set(),      // páginas que se saltaron por ser fotografías
+  fallidas: new Set(),   // páginas que el OCR no pudo leer (error o tiempo agotado)
   manuales: [],   // [{valor, tipo}]
   excluidos: [],  // valores que no se enmascaran
   resultado: null,
@@ -51,6 +53,7 @@ async function cargar(archivo) {
   try {
     const r = await extraer(archivo, {
       ocr: $("usar-ocr").checked,
+      saltarFotos: $("saltar-fotos").checked,
       cancelado: () => estado.cancelado,
       alProgresar: (fase, actual, total) => {
         $("progreso-fase").textContent = fase;
@@ -61,6 +64,8 @@ async function cargar(archivo) {
     });
     estado.originales = r.paginas;
     estado.ocrPaginas = new Set(r.ocrPaginas);
+    estado.fotos = new Set(r.fotos);
+    estado.fallidas = new Set(r.fallidas);
     if (!estado.originales.some((p) => p.trim())) throw new Error("No se encontró texto en el documento. Si es un PDF escaneado, activa el OCR.");
     aplicarLimpieza();
     recalcular();
@@ -104,11 +109,13 @@ function recalcular() {
   estado.tabla = { vault: estado.resultado.vault, glosario: estado.resultado.glosario, archivo: estado.archivo };
   $("fuente-tabla").textContent = `Tabla de esta sesión: ${estado.archivo}`;
   const ocr = estado.ocrPaginas.size;
-  const sinTexto = estado.paginas.filter((p) => p.trim().length < 50).length;
+  const sinTexto = estado.paginas.filter((p, i) => p.trim().length < 50 && !estado.fotos.has(i)).length;
   const filas = [
     ["Archivo", escapar(estado.archivo)],
     ["Páginas", estado.paginas.length.toLocaleString("es-CL")],
     ocr ? ["Con OCR", ocr.toLocaleString("es-CL")] : null,
+    estado.fotos.size ? ["Fotografías", `${estado.fotos.size} <span class="hint">(saltadas)</span>`] : null,
+    estado.fallidas.size ? ["No leídas", `${estado.fallidas.size} <span class="hint">(el OCR falló o tardó demasiado)</span>`] : null,
     sinTexto ? ["Sin texto", `${sinTexto} <span class="hint">(revisar en el original)</span>`] : null,
   ].filter(Boolean);
   $("resumen-archivo").innerHTML = filas.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
@@ -159,7 +166,9 @@ function pintarVista() {
       }
     }
     if (coincide) {
-      const etiqueta = estado.ocrPaginas.has(i) ? `<span class="ocr-etiqueta">OCR</span>` : "";
+      const etiqueta = estado.fotos.has(i) ? `<span class="ocr-etiqueta">Fotografía, sin leer</span>`
+        : estado.fallidas.has(i) ? `<span class="ocr-etiqueta">No se pudo leer</span>`
+        : estado.ocrPaginas.has(i) ? `<span class="ocr-etiqueta">OCR</span>` : "";
       html.push(`<span class="pagina-titulo">Página ${i + 1}${etiqueta}</span>${pagina}`);
     }
   });
@@ -224,7 +233,9 @@ function agregarManual(valor, tipo) {
 // ------------------------------------------------------------------ salida
 function textoParaIA() {
   const r = estado.resultado;
-  const cuerpo = r.enmascaradas.map((t, i) => `=== Página ${i + 1} ===\n${t.trim()}`).join("\n\n");
+  // Las fotografías se indican (sin contenido) para que la IA sepa que el expediente las incluye.
+  const cuerpo = r.enmascaradas.map((t, i) => `=== Página ${i + 1} ===\n${
+    estado.fotos.has(i) && !t.trim() ? "[Fotografía: no incluida]" : t.trim()}`).join("\n\n");
   return `${r.instrucciones}\n\n${cuerpo}`;
 }
 

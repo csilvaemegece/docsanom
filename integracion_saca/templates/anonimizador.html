@@ -27,6 +27,7 @@
 
     <div class="opciones">
       <label class="check"><input type="checkbox" id="usar-ocr" checked> Leer páginas escaneadas (OCR)</label>
+      <label class="check"><input type="checkbox" id="saltar-fotos" checked> Saltar fotografías</label>
       <label class="check"><input type="checkbox" id="limpiar" checked> Limpiar numeración, firmas y ruido del OCR</label>
     </div>
 
@@ -171,6 +172,7 @@
 {% endif %}
 <script src="{{ url_for('static', filename='anonimizador/js/limpieza.js') }}"></script>
 <script src="{{ url_for('static', filename='anonimizador/js/anonimizador.js') }}"></script>
+<script src="{{ url_for('static', filename='anonimizador/js/fotografias.js') }}"></script>
 <script src="{{ url_for('static', filename='anonimizador/js/extraccion.js') }}"></script>
 <script src="{{ url_for('static', filename='anonimizador/js/app.js') }}"></script>
 {% endblock %}

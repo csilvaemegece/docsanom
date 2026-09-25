@@ -68,7 +68,30 @@ function textoDePagina(contenido) {
   }).join("\n");
 }
 
-async function extraerPdf(archivo, { ocr, alProgresar, cancelado }) {
+// Límites del OCR. Una foto escaneada a tamaño real (páginas de más de un metro) renderizada a 2,5x
+// generaba imágenes de 75 megapíxeles que Tesseract tardaba minutos en leer.
+const ESCALA_OCR = 2.5;           // ~180 dpi en una hoja carta u oficio
+const MAX_PIXELES_OCR = 5e6;      // tope por página, cualquiera sea su tamaño
+const MAX_SEGUNDOS_POR_PAGINA = 60;
+
+// Renderiza una miniatura de la página y la pasa al detector de js/fotografias.js. Las fotos en blanco
+// y negro que el detector no reconoce se leen con OCR normal (con la resolución limitada de arriba).
+async function esFotografia(pagina, canvas) {
+  const base = pagina.getViewport({ scale: 1 });
+  const vista = pagina.getViewport({ scale: 160 / Math.max(base.width, base.height) });
+  canvas.width = Math.max(1, Math.round(vista.width));
+  canvas.height = Math.max(1, Math.round(vista.height));
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  await pagina.render({ canvasContext: ctx, viewport: vista }).promise;
+  return window.Fotografias.pareceFotografia(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+}
+
+const conTiempoLimite = (promesa, segundos) => Promise.race([
+  promesa,
+  new Promise((_, rechazar) => setTimeout(() => rechazar(new Error("tiempo agotado")), segundos * 1000)),
+]);
+
+async function extraerPdf(archivo, { ocr, saltarFotos = true, alProgresar, cancelado }) {
   const pdfjs = await import(PDFJS);
   pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
   const pdf = await pdfjs.getDocument({ data: await archivo.arrayBuffer() }).promise;
@@ -76,50 +99,77 @@ async function extraerPdf(archivo, { ocr, alProgresar, cancelado }) {
   for (let i = 1; i <= pdf.numPages; i++) {
     const pagina = await pdf.getPage(i);
     paginas.push(textoDePagina(await pagina.getTextContent()));
+    pagina.cleanup();
     alProgresar?.("Leyendo texto", i, pdf.numPages);
   }
   const escaneadas = paginas.flatMap((t, i) => (t.trim().length < MIN_CARACTERES ? [i] : []));
-  if (!ocr || !escaneadas.length) return { paginas, ocrPaginas: [], escaneadas };
+  const resultado = { paginas, ocrPaginas: [], escaneadas, fotos: [], fallidas: [] };
+  if (!ocr || !escaneadas.length) return resultado;
 
   await cargarScript(TESSERACT);
   const n = Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2), escaneadas.length));
+  const crearWorker = () => Tesseract.createWorker("spa", 1, OPCIONES_TESSERACT);
   // Los workers se crean de a uno: crearlos en paralelo deja al OCR detenido mientras todos
   // intentan descargar y guardar en caché el modelo de español al mismo tiempo.
   const workers = [];
   for (let k = 0; k < n; k++) {
     alProgresar?.(`Preparando OCR ${k + 1} de ${n} (la primera vez descarga el modelo de español)`, 0, escaneadas.length);
-    workers.push(await Tesseract.createWorker("spa", 1, OPCIONES_TESSERACT));
+    workers.push(await crearWorker());
     if (cancelado?.()) break;
   }
   const cola = [...escaneadas];
-  const leidas = [];
   let hechas = 0;
+  const avisar = () => alProgresar?.(
+    "OCR de páginas escaneadas" + (resultado.fotos.length ? ` · ${resultado.fotos.length} fotografías saltadas` : ""),
+    ++hechas, escaneadas.length);
   try {
-    await Promise.all(workers.map(async (worker) => {
+    await Promise.all(workers.map(async (_, w) => {
       const canvas = document.createElement("canvas");
       while (cola.length && !cancelado?.()) {
         const i = cola.shift();
         const pagina = await pdf.getPage(i + 1);
-        const vista = pagina.getViewport({ scale: 2.5 }); // ~180 dpi
-        canvas.width = vista.width;
-        canvas.height = vista.height;
-        await pagina.render({ canvasContext: canvas.getContext("2d"), viewport: vista }).promise;
-        const { data } = await worker.recognize(canvas);
-        paginas[i] = data.text;
-        leidas.push(i);
-        alProgresar?.("OCR de páginas escaneadas", ++hechas, escaneadas.length);
+        try {
+          if (saltarFotos && await esFotografia(pagina, canvas)) {
+            resultado.fotos.push(i);
+            continue;
+          }
+          const base = pagina.getViewport({ scale: 1 });
+          const escala = Math.min(ESCALA_OCR, Math.sqrt(MAX_PIXELES_OCR / (base.width * base.height)));
+          const vista = pagina.getViewport({ scale: escala });
+          canvas.width = Math.round(vista.width);
+          canvas.height = Math.round(vista.height);
+          await pagina.render({ canvasContext: canvas.getContext("2d"), viewport: vista }).promise;
+          const lectura = workers[w].recognize(canvas);
+          lectura.catch(() => {}); // si se agota el tiempo, esta lectura se descarta al cerrar el worker
+          const { data } = await conTiempoLimite(lectura, MAX_SEGUNDOS_POR_PAGINA);
+          paginas[i] = data.text;
+          resultado.ocrPaginas.push(i);
+        } catch (e) {
+          // Una página que no se puede leer (o que tarda demasiado) no detiene el resto del documento.
+          console.warn(`Página ${i + 1} sin OCR:`, e);
+          resultado.fallidas.push(i);
+          if (/tiempo agotado/.test(e?.message)) {
+            workers[w].terminate();
+            workers[w] = await crearWorker(); // el worker anterior quedó ocupado con esa página
+          }
+        } finally {
+          canvas.width = canvas.height = 0; // libera la memoria de la imagen
+          pagina.cleanup();
+          avisar();
+        }
       }
     }));
   } finally {
     await Promise.all(workers.map((w) => w.terminate()));
   }
-  return { paginas, ocrPaginas: leidas, escaneadas };
+  for (const lista of [resultado.ocrPaginas, resultado.fotos, resultado.fallidas]) lista.sort((a, b) => a - b);
+  return resultado;
 }
 
 async function extraerDocx(archivo) {
   await cargarScript(MAMMOTH);
   const { value } = await mammoth.extractRawText({ arrayBuffer: await archivo.arrayBuffer() });
-  return { paginas: [value], ocrPaginas: [], escaneadas: [] };
+  return { paginas: [value], ocrPaginas: [], escaneadas: [], fotos: [], fallidas: [] };
 }
 
 async function extraer(archivo, opciones = {}) {
@@ -128,7 +178,7 @@ async function extraer(archivo, opciones = {}) {
   if (nombre.endsWith(".docx")) return extraerDocx(archivo);
   if (nombre.endsWith(".txt") || archivo.type.startsWith("text/")) {
     // Si el texto trae saltos de página (\f), se respetan como páginas.
-    return { paginas: (await archivo.text()).split("\f"), ocrPaginas: [], escaneadas: [] };
+    return { paginas: (await archivo.text()).split("\f"), ocrPaginas: [], escaneadas: [], fotos: [], fallidas: [] };
   }
   throw new Error("Formato no soportado. Usa PDF, DOCX o TXT.");
 }

@@ -55,6 +55,7 @@ Las variantes de una misma entidad reciben el mismo marcador, para que la IA ent
 - **La escritura a mano no se lee.** El OCR no reconoce texto manuscrito (actas, firmas).
 - **Los datos que permiten ubicar la causa no se enmascaran:** ROL, tribunal, números de expediente, fechas y montos. Con ellos se puede encontrar la causa en el PJUD.
 - **El OCR necesita la pestaña visible.** Tarda unos segundos por página y el navegador lo pausa si cambias de pestaña.
+- **Las fotografías se saltan.** Las páginas sin texto que son fotografías no pasan por el OCR (se puede desactivar con «Saltar fotografías»). El detector reconoce las fotos a color y las de blanco y negro con tonos continuos; una foto en blanco y negro muy clara puede leerse igual con OCR, lo que solo cuesta unos segundos.
 
 ## En producción (servidor Flask del SACA)
 
@@ -74,12 +75,13 @@ También funciona sin publicar: descarga el repositorio y abre `index.html` con 
 - `integracion_saca/`: plantilla Jinja e instrucciones para agregarlo dentro de otra app Flask del SACA.
 - `js/app.js`: lógica de la interfaz.
 - `js/extraccion.js`: lectura de PDF (con OCR), DOCX y TXT.
+- `js/fotografias.js`: detector de páginas que son fotografías, para no pasarlas por el OCR.
 - `js/limpieza.js`: limpieza del texto extraído.
 - `js/anonimizador.js`: motor de seudonimización.
-- `pruebas/`: pruebas de la limpieza y del motor con textos ficticios. `limpieza.js` y `anonimizador.js` no dependen del navegador.
+- `pruebas/`: pruebas de la limpieza y del motor con textos ficticios. `limpieza.js`, `anonimizador.js` y `fotografias.js` no dependen del navegador.
 
 ```bash
-node --test pruebas/anonimizador.test.mjs pruebas/limpieza.test.mjs
+node --test pruebas/anonimizador.test.mjs pruebas/limpieza.test.mjs pruebas/fotografias.test.mjs
 ```
 
 > No subas causas reales ni tablas de marcadores a este repositorio. El `.gitignore` excluye PDF, DOCX y JSON por precaución.
